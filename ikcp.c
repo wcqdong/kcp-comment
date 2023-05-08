@@ -728,6 +728,10 @@ void ikcp_parse_data(ikcpcb *kcp, IKCPSEG *newseg)
         return;
     }
 
+    // 这个循环的意思是给newseg->node找一个合适的插入位置
+    // 保证kcp->rcv_buf中的IKCPSEG是按sn排序的
+    // 例如   10->11->kcp.rev_buf->8->9
+    // 10 11 8 9分别代表sn=10 11 8 9的IKCPSEG包，即p.prev是降序，p.next是升序
     for (p = kcp->rcv_buf.prev; p != &kcp->rcv_buf; p = prev) {
         IKCPSEG *seg = iqueue_entry(p, IKCPSEG, node);
         prev = p->prev;
@@ -736,6 +740,8 @@ void ikcp_parse_data(ikcpcb *kcp, IKCPSEG *newseg)
             repeat = 1;
             break;
         }
+        // 例如sn=11，seg->sn=10，则把sn=11的seg插入到sn=11的seg之后（即下面的iqueue_add(&newseg->node, p);代码）
+        // 如果没从这里break，也没从上面repeat=1处break，则正常循环结束，当前p=kcp->rcv_buf，则把&newseg->node插入到p之后，
         if (_itimediff(sn, seg->sn) > 0) {
             break;
         }
@@ -743,6 +749,7 @@ void ikcp_parse_data(ikcpcb *kcp, IKCPSEG *newseg)
 
     if (repeat == 0) {
         iqueue_init(&newseg->node);
+        // p.next = &newseg->node
         iqueue_add(&newseg->node, p);
         kcp->nrcv_buf++;
     }	else {
